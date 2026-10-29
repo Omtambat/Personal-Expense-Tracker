@@ -1,0 +1,213 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Expense Tracker</title>
+</head>
+<body>
+    <h1>Personal Expense Tracker</h1>
+
+    <form id="expenseForm">
+        <input type="hidden" id="expenseId">
+
+        <label>Description:</label>
+        <input type="text" id="description"
+               placeholder="Lunch or Bus fare" required>
+        <br><br>
+
+        <label>Amount:</label>
+        <input type="number" id="amount"
+               placeholder="Enter amount" min="0.01"
+               step="any" required>
+        <br><br>
+
+        <label>Category:</label>
+        <select id="category" required>
+            <option value="">Select category</option>
+            <option value="Food">Food</option>
+            <option value="Travel">Travel</option>
+            <option value="Shopping">Shopping</option>
+            <option value="Other">Other</option>
+        </select>
+        <br><br>
+
+        <button type="submit" id="saveButton">Add Expense</button>
+        <button type="button" onclick="resetForm()">Cancel Edit</button>
+    </form>
+
+    <p id="message" role="status"></p>
+
+    <h2>All Expenses</h2>
+    <button onclick="getExpenses()">Refresh Expenses</button>
+
+    <table border="1" cellpadding="8">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Description</th>
+                <th>Amount</th>
+                <th>Category</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="expenseList"></tbody>
+    </table>
+
+    <h3>Total Spent: ₹<span id="total">0.00</span></h3>
+
+    <script>
+        const API = "http://127.0.0.1:8000/expenses";
+
+        const form = document.getElementById("expenseForm");
+        const message = document.getElementById("message");
+
+        function showMessage(text) {
+            message.textContent = text;
+        }
+
+        function resetForm() {
+            form.reset();
+            document.getElementById("expenseId").value = "";
+            document.getElementById("saveButton").textContent =
+                "Add Expense";
+        }
+
+        form.addEventListener("submit", async function(event) {
+            event.preventDefault();
+
+            const id = document.getElementById("expenseId").value;
+            const description =
+                document.getElementById("description").value.trim();
+            const amount =
+                Number(document.getElementById("amount").value);
+            const category =
+                document.getElementById("category").value;
+
+            if (!description || !category ||
+                !Number.isFinite(amount) || amount <= 0) {
+                showMessage("Enter a description, category, and amount greater than zero.");
+                return;
+            }
+
+            const expense = { description, amount, category };
+
+            try {
+                const response = await fetch(
+                    id ? `${API}/${id}` : API,
+                    {
+                        method: id ? "PUT" : "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify(expense)
+                    }
+                );
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || "Request failed");
+                }
+
+                showMessage(data.message);
+                resetForm();
+                await getExpenses();
+
+            } catch (error) {
+                showMessage("Error: " + error.message);
+            }
+        });
+
+        async function getExpenses() {
+            try {
+                const response = await fetch(API);
+
+                if (!response.ok) {
+                    throw new Error("Could not fetch expenses");
+                }
+
+                const data = await response.json();
+                const list = document.getElementById("expenseList");
+                list.innerHTML = "";
+
+                let total = 0;
+
+                data.forEach(expense => {
+                    total += expense.amount;
+
+                    const row = document.createElement("tr");
+
+                    [
+                        expense.id,
+                        expense.description,
+                        "₹" + expense.amount.toFixed(2),
+                        expense.category
+                    ].forEach(value => {
+                        const cell = document.createElement("td");
+                        cell.textContent = value;
+                        row.appendChild(cell);
+                    });
+
+                    const actions = document.createElement("td");
+
+                    const editButton = document.createElement("button");
+                    editButton.textContent = "Edit";
+                    editButton.onclick = () => editExpense(expense);
+
+                    const deleteButton = document.createElement("button");
+                    deleteButton.textContent = "Delete";
+                    deleteButton.onclick = () =>
+                        deleteExpense(expense.id);
+
+                    actions.append(editButton, deleteButton);
+                    row.appendChild(actions);
+                    list.appendChild(row);
+                });
+
+                document.getElementById("total").textContent =
+                    total.toFixed(2);
+
+            } catch (error) {
+                showMessage("Error: " + error.message);
+            }
+        }
+
+        function editExpense(expense) {
+            document.getElementById("expenseId").value = expense.id;
+            document.getElementById("description").value =
+                expense.description;
+            document.getElementById("amount").value = expense.amount;
+            document.getElementById("category").value = expense.category;
+
+            document.getElementById("saveButton").textContent =
+                "Update Expense";
+
+            showMessage("Editing expense ID " + expense.id);
+        }
+
+        async function deleteExpense(id) {
+            try {
+                const response = await fetch(`${API}/${id}`, {
+                    method: "DELETE"
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || "Request failed");
+                }
+
+                showMessage(data.message);
+                await getExpenses();
+
+            } catch (error) {
+                showMessage("Error: " + error.message);
+            }
+        }
+
+        getExpenses();
+    </script>
+</body>
+</html>
